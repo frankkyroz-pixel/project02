@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Absensi Harian - Sistem Absensi{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <h2>Absensi Harian</h2>
+</header>
+
+<div class="stack">
+
+  <!-- Card 1: Form Absensi -->
+  <section class="card" aria-labelledby="judul-form">
+    <h3 id="judul-form">Form Absensi</h3>
+    <p class="muted">Pilih nama Anda, lalu tekan Absen Datang saat tiba atau Absen Pulang saat selesai bekerja. Waktu dicatat otomatis oleh sistem.</p>
+
+    <div class="notif-area" role="status" aria-live="polite">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+    </div>
+
+    <form method="post" id="form-absen" class="absen-form" action="{{ url_for('absensi_datang') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="id_karyawan">Nama karyawan</label>
+      <select id="id_karyawan" name="id_karyawan" required>
+        <option value="">Pilih nama karyawan…</option>
+        {% for k in karyawan_aktif %}
+        <option value="{{ k.id }}">{{ k.nama }} ({{ k.id }})</option>
+        {% endfor %}
+      </select>
+      {% if not karyawan_aktif %}
+      <p class="field-error">Belum ada karyawan berstatus Aktif. Tambahkan atau aktifkan karyawan di menu Data Karyawan.</p>
+      {% endif %}
+
+      <div class="absen-actions">
+        <button type="submit" class="btn btn-primary" formaction="{{ url_for('absensi_datang') }}">Absen Datang</button>
+        <button type="submit" class="btn btn-dark" formaction="{{ url_for('absensi_pulang') }}">Absen Pulang</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Card 2: Informasi Jadwal Absensi (nilai dari konfigurasi di app.py) -->
+  <section class="card" aria-labelledby="judul-jadwal">
+    <h3 id="judul-jadwal">Informasi Jadwal Absensi</h3>
+
+    <div class="jadwal-grid">
+      <div class="jadwal-item">
+        <h4>Jadwal Absen Datang</h4>
+        <ul class="jadwal-list">
+          <li><span>Waktu mulai</span><strong>{{ jadwal.mulai_datang }} WIB</strong></li>
+          <li><span>Batas tepat waktu</span><strong>{{ jadwal.batas_tepat }} WIB</strong></li>
+        </ul>
+        <p class="small">
+          <span class="badge badge-green">Tepat Waktu</span>
+          jika absen sampai pukul {{ jadwal.batas_tepat }} WIB.
+        </p>
+        <p class="small">
+          <span class="badge badge-orange">Terlambat</span>
+          jika absen setelah pukul {{ jadwal.batas_tepat }} WIB.
+        </p>
+      </div>
+
+      <div class="jadwal-item">
+        <h4>Jadwal Absen Pulang</h4>
+        <ul class="jadwal-list">
+          <li><span>Waktu mulai</span><strong>{{ jadwal.mulai_pulang }} WIB</strong></li>
+        </ul>
+        <p class="small muted">Karyawan wajib melakukan absen datang terlebih dahulu.</p>
+        <p class="small muted">Setiap karyawan hanya dapat melakukan satu kali absen pulang per hari.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('form-absen');
+  var tombol = form.querySelectorAll('button[type=submit]');
+  tombol.forEach(function (b) { b.dataset.teks = b.textContent; });
+
+  function aktifkan() {
+    tombol.forEach(function (b) {
+      b.disabled = false;
+      b.textContent = b.dataset.teks;
+    });
+  }
+
+  // Cegah klik berulang saat permintaan diproses. Dinonaktifkan lewat setTimeout
+  // supaya tombol yang ditekan tetap ikut terkirim (formaction).
+  form.addEventListener('submit', function (e) {
+    if (e.submitter) e.submitter.textContent = 'Memproses…';
+    setTimeout(function () {
+      tombol.forEach(function (b) { b.disabled = true; });
+    }, 0);
+  });
+
+  // Tombol Kembali di browser (cache halaman): pulihkan tombol
+  window.addEventListener('pageshow', function (e) { if (e.persisted) aktifkan(); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Data Karyawan - Sistem Absensi{% endblock %}
+{% block main_class %}content-fit{% endblock %}
+
+{% macro field(form, name, label, type, vals, errs) -%}
+  <label for="{{ form }}-{{ name }}">{{ label }}</label>
+  <input type="{{ type }}" id="{{ form }}-{{ name }}" name="{{ name }}"
+         value="{{ vals.get(name, '') }}" required maxlength="{{ 254 if name == 'email' else 100 }}"
+         class="{{ 'has-error' if errs.get(name) }}">
+  {% if errs.get(name) %}<p class="field-error">{{ errs[name] }}</p>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set m_add = modal if modal and modal.mode == 'tambah' else none %}
+{% set m_edit = modal if modal and modal.mode == 'edit' else none %}
+
+<header class="page-head">
+  <h2>Data Karyawan</h2>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }}" role="status">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="card table-card">
+  <div class="row-between">
+    <form method="get" id="form-cari">
+      <input type="search" name="q" id="input-cari" class="search" placeholder="Cari karyawan..." value="{{ q }}" autocomplete="off">
+    </form>
+    <button type="button" class="btn btn-primary" id="btn-tambah">+ Tambah Karyawan</button>
+  </div>
+
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr><th>ID</th><th>Nama</th><th>Jabatan</th><th>Email</th><th>No. HP</th><th>Status</th><th>Aksi</th></tr>
+      </thead>
+      <tbody>
+        {% for k in data %}
+        <tr>
+          <td>{{ k.id }}</td>
+          <td>{{ k.nama }}</td>
+          <td>{{ k.jabatan }}</td>
+          <td>{{ k.email }}</td>
+          <td>{{ k.hp }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if k.status == 'Aktif' else 'badge-orange' if k.status == 'Cuti' else 'badge-red' }}">{{ k.status }}</span>
+          </td>
+          <td class="actions">
+            <button type="button" class="icon-btn btn-edit" title="Edit" aria-label="Edit {{ k.nama }}"
+                    data-action="{{ url_for('karyawan_edit', kid=k.id) }}"
+                    data-nama="{{ k.nama }}" data-email="{{ k.email }}" data-hp="{{ k.hp }}"
+                    data-jabatan="{{ k.jabatan }}" data-status="{{ k.status }}">✏️</button>
+            <button type="button" class="icon-btn btn-hapus" title="Hapus" aria-label="Hapus {{ k.nama }}"
+                    data-action="{{ url_for('karyawan_hapus', kid=k.id) }}"
+                    data-id="{{ k.id }}" data-nama="{{ k.nama }}">🗑️</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="center muted">
+          {{ 'Data karyawan tidak ditemukan' if q else 'Belum ada data karyawan' }}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row-between">
+    <span class="muted small">
+      {% if jumlah_hal > 1 %}Menampilkan {{ awal }}–{{ akhir }} dari {{ total }} data{% else %}Menampilkan {{ total }} data{% endif %}
+    </span>
+    <nav class="pagination" aria-label="Pagination">
+      <a {% if page > 1 %}href="{{ url_for('karyawan', q=q or None, page=page - 1) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Sebelumnya">‹</a>
+      {% for n in halaman %}
+        {% if n is none %}<a class="gap">…</a>
+        {% else %}<a href="{{ url_for('karyawan', q=q or None, page=n) }}" class="{{ 'active' if n == page }}" {% if n == page %}aria-current="page"{% endif %}>{{ n }}</a>
+        {% endif %}
+      {% endfor %}
+      <a {% if page < jumlah_hal %}href="{{ url_for('karyawan', q=q or None, page=page + 1) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Berikutnya">›</a>
+    </nav>
+  </div>
+</div>
+
+<!-- Modal Tambah -->
+<dialog id="dlg-tambah" class="modal">
+  <form method="post" action="{{ url_for('karyawan_tambah') }}">
+    <h3>Tambah Karyawan</h3>
+    <p class="muted small">ID dibuat otomatis dan status awal adalah Aktif.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="page" value="{{ page }}">
+    {{ field('add', 'nama', 'Nama lengkap', 'text', m_add.nilai if m_add else {}, m_add.errors if m_add else {}) }}
+    {{ field('add', 'email', 'Email', 'email', m_add.nilai if m_add else {}, m_add.errors if m_add else {}) }}
+    {{ field('add', 'hp', 'Nomor HP', 'tel', m_add.nilai if m_add else {}, m_add.errors if m_add else {}) }}
+    {{ field('add', 'jabatan', 'Jabatan', 'text', m_add.nilai if m_add else {}, m_add.errors if m_add else {}) }}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-primary">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Edit -->
+<dialog id="dlg-edit" class="modal">
+  <form method="post" action="{{ url_for('karyawan_edit', kid=m_edit.id) if m_edit else '#' }}">
+    <h3>Edit Karyawan</h3>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="page" value="{{ page }}">
+    {{ field('edit', 'nama', 'Nama lengkap', 'text', m_edit.nilai if m_edit else {}, m_edit.errors if m_edit else {}) }}
+    {{ field('edit', 'email', 'Email', 'email', m_edit.nilai if m_edit else {}, m_edit.errors if m_edit else {}) }}
+    {{ field('edit', 'hp', 'Nomor HP', 'tel', m_edit.nilai if m_edit else {}, m_edit.errors if m_edit else {}) }}
+    {{ field('edit', 'jabatan', 'Jabatan', 'text', m_edit.nilai if m_edit else {}, m_edit.errors if m_edit else {}) }}
+    <label for="edit-status">Status</label>
+    <select id="edit-status" name="status" required class="{{ 'has-error' if m_edit and m_edit.errors.get('status') }}">
+      {% for s in status_list %}
+      <option value="{{ s }}" {{ 'selected' if m_edit and m_edit.nilai.status == s }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    {% if m_edit and m_edit.errors.get('status') %}<p class="field-error">{{ m_edit.errors['status'] }}</p>{% endif %}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Dialog Konfirmasi Hapus -->
+<dialog id="dlg-hapus" class="modal">
+  <form method="post" action="#">
+    <h3>Hapus Karyawan?</h3>
+    <p>Data karyawan <strong id="hapus-nama"></strong> (<span id="hapus-id"></span>) akan dihapus dari daftar.</p>
+    <p class="muted small">Riwayat absensi karyawan ini tetap tersimpan.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="page" value="{{ page }}">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-danger">Ya, Hapus</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var dlgTambah = document.getElementById('dlg-tambah');
+  var dlgEdit = document.getElementById('dlg-edit');
+  var dlgHapus = document.getElementById('dlg-hapus');
+
+  function bersih(d) {
+    d.querySelectorAll('.field-error').forEach(function (e) { e.remove(); });
+    d.querySelectorAll('.has-error').forEach(function (e) { e.classList.remove('has-error'); });
+  }
+
+  document.getElementById('btn-tambah').addEventListener('click', function () {
+    bersih(dlgTambah);
+    dlgTambah.querySelectorAll('input[type=text], input[type=email], input[type=tel]').forEach(function (i) { i.value = ''; });
+    dlgTambah.showModal();
+  });
+
+  document.querySelectorAll('.btn-edit').forEach(function (b) {
+    b.addEventListener('click', function () {
+      bersih(dlgEdit);
+      dlgEdit.querySelector('form').action = b.dataset.action;
+      document.getElementById('edit-nama').value = b.dataset.nama;
+      document.getElementById('edit-email').value = b.dataset.email;
+      document.getElementById('edit-hp').value = b.dataset.hp;
+      document.getElementById('edit-jabatan').value = b.dataset.jabatan;
+      document.getElementById('edit-status').value = b.dataset.status;
+      dlgEdit.showModal();
+    });
+  });
+
+  document.querySelectorAll('.btn-hapus').forEach(function (b) {
+    b.addEventListener('click', function () {
+      dlgHapus.querySelector('form').action = b.dataset.action;
+      document.getElementById('hapus-nama').textContent = b.dataset.nama;
+      document.getElementById('hapus-id').textContent = b.dataset.id;
+      dlgHapus.showModal();
+    });
+  });
+
+  [dlgTambah, dlgEdit, dlgHapus].forEach(function (d) {
+    d.querySelectorAll('[data-tutup]').forEach(function (b) {
+      b.addEventListener('click', function () { d.close(); });
+    });
+    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+  });
+
+  // Pencarian: kirim otomatis ke backend setelah berhenti mengetik
+  var formCari = document.getElementById('form-cari');
+  var inputCari = document.getElementById('input-cari');
+  var timer;
+  inputCari.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      try { sessionStorage.setItem('fokusCari', '1'); } catch (e) {}
+      formCari.submit();
+    }, 400);
+  });
+  try {
+    if (sessionStorage.getItem('fokusCari')) {
+      sessionStorage.removeItem('fokusCari');
+      inputCari.focus();
+      var n = inputCari.value.length;
+      inputCari.setSelectionRange(n, n);
+    }
+  } catch (e) {}
+
+  {% if modal %}
+  // Validasi backend gagal: buka kembali modal dengan input dan pesan error
+  document.getElementById('{{ "dlg-tambah" if modal.mode == "tambah" else "dlg-edit" }}').showModal();
+  {% endif %}
+})();
+</script>
+{% endblock %}

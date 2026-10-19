@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block title %}Pengajuan Izin & Cuti - Sistem Absensi{% endblock %}
+{% block main_class %}content-fit content-fit-auto{% endblock %}
+
+{% block content %}
+{% set m_buat = modal if modal and modal.mode == 'buat' else none %}
+{% set m_tolak = modal if modal and modal.mode == 'tolak' else none %}
+
+<header class="page-head page-head-col">
+  <h2>Pengajuan Izin &amp; Cuti</h2>
+  <p class="muted">Kelola pengajuan izin dan cuti karyawan. Pengajuan yang disetujui memengaruhi perhitungan kehadiran pada rentang tanggalnya.</p>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}<div class="alert alert-{{ cat }} alert-flush" role="status">{{ msg }}</div>{% endfor %}
+{% endwith %}
+
+<section class="stats" aria-label="Ringkasan pengajuan">
+  <div class="stat-card">
+    <span class="muted small">Total Pengajuan</span>
+    <strong>{{ "{:,}".format(ringkasan.total) }}</strong>
+    <span class="muted small">pengajuan</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Menunggu Persetujuan</span>
+    <strong>{{ "{:,}".format(ringkasan.menunggu) }}</strong>
+    <span class="text-orange small">perlu diproses</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Disetujui</span>
+    <strong>{{ "{:,}".format(ringkasan.disetujui) }}</strong>
+    <span class="text-green small">pengajuan</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Ditolak</span>
+    <strong>{{ "{:,}".format(ringkasan.ditolak) }}</strong>
+    <span class="text-red small">pengajuan</span>
+  </div>
+</section>
+
+<section class="card filter-card" aria-label="Filter pengajuan">
+  <form method="get" id="form-filter" class="filter-grid filter-grid-pgj">
+    <div class="filter-field filter-q">
+      <label for="f-q">Cari karyawan</label>
+      <input type="search" id="f-q" name="q" value="{{ f.q }}" placeholder="Cari nama atau ID karyawan..." autocomplete="off" maxlength="100">
+    </div>
+    <div class="filter-field">
+      <label for="f-jenis">Jenis</label>
+      <select id="f-jenis" name="jenis">
+        <option value="">Semua Jenis</option>
+        {% for j in jenis_list %}<option value="{{ j }}" {{ 'selected' if f.jenis == j }}>{{ j }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="f-status">Status</label>
+      <select id="f-status" name="status">
+        <option value="">Semua Status</option>
+        {% for s in status_list %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="f-dari">Periode dari</label>
+      <input type="date" id="f-dari" name="dari" value="{{ f.dari.isoformat() if f.dari }}" {% if f.sampai %}max="{{ f.sampai.isoformat() }}"{% endif %}>
+    </div>
+    <div class="filter-field">
+      <label for="f-sampai">Periode sampai</label>
+      <input type="date" id="f-sampai" name="sampai" value="{{ f.sampai.isoformat() if f.sampai }}" {% if f.dari %}min="{{ f.dari.isoformat() }}"{% endif %}>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary">Terapkan</button>
+      <a href="{{ url_for('pengajuan') }}" class="btn btn-outline">Reset Filter</a>
+    </div>
+  </form>
+  {% for e in errors %}<div class="alert alert-error" role="alert">{{ e }}</div>{% endfor %}
+</section>
+
+<section class="card table-card" aria-labelledby="judul-daftar">
+  <div class="row-between daftar-head">
+    <div>
+      <h3 id="judul-daftar">Daftar Pengajuan</h3>
+      <span class="muted small">
+        {% if filter_aktif %}Menampilkan {{ data|length }} dari {{ ringkasan.total }} pengajuan{% else %}Menampilkan {{ data|length }} pengajuan{% endif %}
+      </span>
+    </div>
+    {% if is_admin %}<button type="button" class="btn btn-primary" id="btn-buat">+ Buat Pengajuan</button>{% endif %}
+  </div>
+
+  <div class="table-scroll scroll-pengajuan">
+    <table class="table table-pengajuan">
+      <thead>
+        <tr>
+          <th>No.</th><th>ID Karyawan</th><th>Nama Karyawan</th><th>Jenis Pengajuan</th>
+          <th>Tanggal Mulai</th><th>Tanggal Selesai</th><th>Alasan</th><th>Tanggal Pengajuan</th>
+          <th>Status</th><th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in data %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ r.id_karyawan }}</td>
+          <td>{{ r.nama }}{% if r.karyawan_status in ('Nonaktif', 'Dihapus') %} <span class="muted small">({{ r.karyawan_status }})</span>{% endif %}</td>
+          <td>{{ r.jenis }}</td>
+          <td class="nowrap">{{ format_tanggal(r.mulai) }}</td>
+          <td class="nowrap">{{ format_tanggal(r.selesai) }}</td>
+          <td class="cell-alasan" title="{{ r.alasan }}">{{ r.alasan }}</td>
+          <td class="nowrap">{{ format_tanggal(r.diajukan.date()) }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if r.status == 'Disetujui' else 'badge-red' if r.status == 'Ditolak' else 'badge-orange' }}">{{ r.status }}</span>
+          </td>
+          <td class="actions">
+            {% if is_admin and r.status == 'Menunggu' %}
+            <button type="button" class="btn btn-sm btn-success btn-setuju" data-id="{{ r.id }}" data-nama="{{ r.nama }}" data-jenis="{{ r.jenis }}"
+                    data-action="{{ url_for('pengajuan_setujui', pid=r.id) }}">Setujui</button>
+            <button type="button" class="btn btn-sm btn-danger btn-tolak" data-id="{{ r.id }}" data-nama="{{ r.nama }}"
+                    data-action="{{ url_for('pengajuan_tolak', pid=r.id) }}">Tolak</button>
+            {% endif %}
+            <button type="button" class="btn btn-sm btn-outline btn-detail" data-id="{{ r.id }}">Detail</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty-cell">
+          <div class="empty-state">
+            <strong>{{ 'Tidak ada pengajuan yang cocok' if filter_aktif else 'Belum ada pengajuan' }}</strong>
+            <span class="muted small">
+              {% if filter_aktif %}Ubah atau reset filter untuk melihat pengajuan lain.
+              {% elif is_admin %}Klik “+ Buat Pengajuan” untuk mencatat izin atau cuti karyawan.
+              {% else %}Pengajuan izin dan cuti akan muncul di sini.{% endif %}
+            </span>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="row-between"><span class="muted small">Terbaru di atas. Tanggal dalam WIB.</span></div>
+</section>
+
+{% if is_admin %}
+<!-- Modal Buat Pengajuan -->
+<dialog id="dlg-buat" class="modal">
+  <form method="post" action="{{ url_for('pengajuan_buat') }}" id="form-buat">
+    <h3>Buat Pengajuan</h3>
+    <p class="muted small">Status awal pengajuan adalah Menunggu dan baru berlaku setelah disetujui admin.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="qs" value="{{ qs }}">
+
+    <label for="b-karyawan">Nama karyawan</label>
+    <select id="b-karyawan" name="id_karyawan" required class="{{ 'has-error' if m_buat and m_buat.errors.get('id_karyawan') }}">
+      <option value="">Pilih nama karyawan…</option>
+      {% for k in karyawan_aktif %}
+      <option value="{{ k.id }}" {{ 'selected' if m_buat and m_buat.nilai.id_karyawan == k.id }}>{{ k.nama }} ({{ k.id }})</option>
+      {% endfor %}
+    </select>
+    {% if m_buat and m_buat.errors.get('id_karyawan') %}<p class="field-error">{{ m_buat.errors['id_karyawan'] }}</p>{% endif %}
+    {% if not karyawan_aktif %}<p class="field-error">Belum ada karyawan berstatus Aktif.</p>{% endif %}
+
+    <label for="b-jenis">Jenis pengajuan</label>
+    <select id="b-jenis" name="jenis" required class="{{ 'has-error' if m_buat and m_buat.errors.get('jenis') }}">
+      <option value="">Pilih jenis…</option>
+      {% for j in jenis_list %}<option value="{{ j }}" {{ 'selected' if m_buat and m_buat.nilai.jenis == j }}>{{ j }}</option>{% endfor %}
+    </select>
+    {% if m_buat and m_buat.errors.get('jenis') %}<p class="field-error">{{ m_buat.errors['jenis'] }}</p>{% endif %}
+
+    <div class="form-row-2">
+      <div>
+        <label for="b-mulai">Tanggal mulai</label>
+        <input type="date" id="b-mulai" name="mulai" required value="{{ m_buat.nilai.mulai if m_buat }}" class="{{ 'has-error' if m_buat and m_buat.errors.get('mulai') }}">
+      </div>
+      <div>
+        <label for="b-selesai">Tanggal selesai</label>
+        <input type="date" id="b-selesai" name="selesai" required value="{{ m_buat.nilai.selesai if m_buat }}" class="{{ 'has-error' if m_buat and m_buat.errors.get('selesai') }}">
+      </div>
+    </div>
+    {% if m_buat and m_buat.errors.get('mulai') %}<p class="field-error">{{ m_buat.errors['mulai'] }}</p>{% endif %}
+    {% if m_buat and m_buat.errors.get('selesai') %}<p class="field-error">{{ m_buat.errors['selesai'] }}</p>{% endif %}
+
+    <label for="b-alasan">Alasan pengajuan</label>
+    <textarea id="b-alasan" name="alasan" rows="3" required maxlength="500" class="{{ 'has-error' if m_buat and m_buat.errors.get('alasan') }}">{{ m_buat.nilai.alasan if m_buat }}</textarea>
+    {% if m_buat and m_buat.errors.get('alasan') %}<p class="field-error">{{ m_buat.errors['alasan'] }}</p>{% endif %}
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-primary" id="btn-kirim">Kirim Pengajuan</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Konfirmasi Setujui -->
+<dialog id="dlg-setuju" class="modal">
+  <form method="post" action="#" class="form-sekali">
+    <h3>Setujui pengajuan?</h3>
+    <p><span id="setuju-info"></span></p>
+    <p class="muted small">Setelah disetujui, karyawan tidak dihitung Tidak Hadir pada rentang tanggal pengajuan (bila belum absen). Catatan absensi yang sudah ada tidak diubah.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="qs" value="{{ qs }}">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-success">Ya, Setujui</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Form Tolak -->
+<dialog id="dlg-tolak" class="modal">
+  <form method="post" action="{{ url_for('pengajuan_tolak', pid=m_tolak.id) if m_tolak else '#' }}" class="form-sekali">
+    <h3>Tolak pengajuan</h3>
+    <p><span id="tolak-info">{{ m_tolak.id if m_tolak }}</span></p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="qs" value="{{ qs }}">
+    <label for="t-alasan">Alasan penolakan</label>
+    <textarea id="t-alasan" name="alasan_penolakan" rows="3" required maxlength="500" class="{{ 'has-error' if m_tolak }}">{{ m_tolak.alasan if m_tolak }}</textarea>
+    {% if m_tolak %}<p class="field-error">{{ m_tolak.error }}</p>{% endif %}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" data-tutup>Batal</button>
+      <button type="submit" class="btn btn-danger">Tolak Pengajuan</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<!-- Modal Detail -->
+<dialog id="dlg-detail" class="modal modal-lg">
+  <h3>Detail Pengajuan <span id="d-id" class="muted"></span></h3>
+  <dl class="detail-list">
+    <div><dt>Karyawan</dt><dd id="d-karyawan"></dd></div>
+    <div><dt>Jabatan</dt><dd id="d-jabatan"></dd></div>
+    <div><dt>Jenis</dt><dd id="d-jenis"></dd></div>
+    <div><dt>Periode</dt><dd id="d-periode"></dd></div>
+    <div><dt>Durasi</dt><dd id="d-durasi"></dd></div>
+    <div><dt>Alasan</dt><dd id="d-alasan" class="pre-wrap"></dd></div>
+    <div><dt>Diajukan</dt><dd id="d-diajukan"></dd></div>
+    <div><dt>Status</dt><dd><span id="d-status" class="badge"></span></dd></div>
+    <div id="d-baris-proses"><dt>Diputuskan</dt><dd id="d-proses"></dd></div>
+    <div id="d-baris-tolak"><dt>Alasan penolakan</dt><dd id="d-tolak" class="pre-wrap"></dd></div>
+  </dl>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-outline" data-tutup>Tutup</button>
+  </div>
+</dialog>
+
+<script type="application/json" id="data-detail">{{ detail|tojson }}</script>
+<script>
+(function () {
+  var DETAIL = JSON.parse(document.getElementById('data-detail').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  var dlgBuat = $('dlg-buat'), dlgSetuju = $('dlg-setuju'), dlgTolak = $('dlg-tolak'), dlgDetail = $('dlg-detail');
+  var semua = [dlgBuat, dlgSetuju, dlgTolak, dlgDetail].filter(Boolean);
+
+  semua.forEach(function (d) {
+    d.querySelectorAll('[data-tutup]').forEach(function (b) { b.addEventListener('click', function () { d.close(); }); });
+    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+  });
+
+  function bersih(d) {
+    d.querySelectorAll('.field-error').forEach(function (e) { e.remove(); });
+    d.querySelectorAll('.has-error').forEach(function (e) { e.classList.remove('has-error'); });
+  }
+
+  // ---- Buat pengajuan ----
+  if (dlgBuat) {
+    var mulai = $('b-mulai'), selesai = $('b-selesai');
+    $('btn-buat').addEventListener('click', function () {
+      bersih(dlgBuat);
+      $('form-buat').reset();
+      selesai.min = '';
+      dlgBuat.showModal();
+    });
+    mulai.addEventListener('change', function () {
+      if (!mulai.value) return;
+      selesai.min = mulai.value;
+      if (!selesai.value || selesai.value < mulai.value) selesai.value = mulai.value;
+    });
+  }
+
+  // ---- Setujui (konfirmasi) ----
+  document.querySelectorAll('.btn-setuju').forEach(function (b) {
+    b.addEventListener('click', function () {
+      dlgSetuju.querySelector('form').action = b.dataset.action;
+      $('setuju-info').textContent = b.dataset.jenis + ' ' + b.dataset.id + ' atas nama ' + b.dataset.nama + ' akan disetujui.';
+      dlgSetuju.showModal();
+    });
+  });
+
+  // ---- Tolak (alasan wajib) ----
+  document.querySelectorAll('.btn-tolak').forEach(function (b) {
+    b.addEventListener('click', function () {
+      bersih(dlgTolak);
+      dlgTolak.querySelector('form').action = b.dataset.action;
+      $('tolak-info').textContent = b.dataset.id + ' atas nama ' + b.dataset.nama;
+      $('t-alasan').value = '';
+      dlgTolak.showModal();
+    });
+  });
+
+  // ---- Detail ----
+  document.querySelectorAll('.btn-detail').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var d = DETAIL[b.dataset.id];
+      if (!d) return;
+      $('d-id').textContent = d.id;
+      var kar = d.nama + ' (' + d.id_karyawan + ')';
+      if (d.karyawan_status === 'Nonaktif' || d.karyawan_status === 'Dihapus') kar += ' — ' + d.karyawan_status;
+      $('d-karyawan').textContent = kar;
+      $('d-jabatan').textContent = d.jabatan;
+      $('d-jenis').textContent = d.jenis;
+      $('d-periode').textContent = d.mulai === d.selesai ? d.mulai : d.mulai + ' s.d. ' + d.selesai;
+      $('d-durasi').textContent = d.durasi;
+      $('d-alasan').textContent = d.alasan;
+      $('d-diajukan').textContent = d.diajukan + (d.diajukan_oleh !== '—' ? ' oleh ' + d.diajukan_oleh : '');
+      var st = $('d-status');
+      st.textContent = d.status;
+      st.className = 'badge ' + (d.status === 'Disetujui' ? 'badge-green' : d.status === 'Ditolak' ? 'badge-red' : 'badge-orange');
+      var proses = d.diproses_pada ? d.diproses_pada + (d.diproses_oleh ? ' oleh ' + d.diproses_oleh : '') : '';
+      $('d-proses').textContent = proses;
+      $('d-baris-proses').hidden = !proses;
+      $('d-tolak').textContent = d.alasan_penolakan;
+      $('d-baris-tolak').hidden = !d.alasan_penolakan;
+      dlgDetail.showModal();
+    });
+  });
+
+  // ---- Cegah kirim ganda: tombol submit dinonaktifkan setelah ditekan ----
+  function aktifkan() {
+    document.querySelectorAll('dialog form button[type=submit]').forEach(function (b) {
+      b.disabled = false;
+      if (b.dataset.teks) b.textContent = b.dataset.teks;
+    });
+  }
+  document.querySelectorAll('dialog form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      var tombol = form.querySelector('button[type=submit]');
+      tombol.dataset.teks = tombol.textContent;
+      tombol.textContent = 'Memproses…';
+      setTimeout(function () { tombol.disabled = true; }, 0);
+    });
+  });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) aktifkan(); });
+
+  // ---- Filter: kirim otomatis ke backend; tombol "Terapkan" tetap ada tanpa JavaScript ----
+  var form = $('form-filter'), dari = $('f-dari'), sampai = $('f-sampai'), q = $('f-q'), timer;
+  dari.addEventListener('change', function () { if (dari.value) sampai.min = dari.value; });
+  sampai.addEventListener('change', function () { if (sampai.value) dari.max = sampai.value; });
+  function kirim() {
+    try { sessionStorage.setItem('fokusPengajuan', q === document.activeElement ? '1' : ''); } catch (e) {}
+    form.submit();
+  }
+  [dari, sampai, $('f-jenis'), $('f-status')].forEach(function (el) { el.addEventListener('change', kirim); });
+  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(kirim, 400); });
+  try {
+    if (sessionStorage.getItem('fokusPengajuan')) {
+      sessionStorage.removeItem('fokusPengajuan');
+      q.focus(); var n = q.value.length; q.setSelectionRange(n, n);
+    }
+  } catch (e) {}
+
+  {% if modal %}
+  // Validasi backend gagal: buka kembali modal dengan input dan pesan error
+  $('{{ "dlg-buat" if modal.mode == "buat" else "dlg-tolak" }}').showModal();
+  {% endif %}
+})();
+</script>
+{% endblock %}

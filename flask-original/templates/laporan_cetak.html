@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laporan Absensi {{ f.dari.isoformat() }} – {{ f.sampai.isoformat() }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background: #fff; padding: 24px; }
+    .cetak-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+    .cetak h1 { font-size: 20px; margin-bottom: 2px; }
+    .cetak-meta { margin: 10px 0 14px; display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; font-size: 13px; }
+    .cetak-meta dt { color: var(--muted); }
+    .cetak-ringkas { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+    .cetak-ringkas div { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; }
+    .cetak-ringkas strong { font-size: 18px; }
+    .cetak table { margin: 0; font-size: 12px; }
+    .cetak th, .cetak td { padding: 6px 6px; }
+    .cetak thead { display: table-header-group; }
+    .cetak tr { break-inside: avoid; }
+    @page { size: A4 landscape; margin: 12mm; }
+    @media print {
+      body { padding: 0; }
+      .cetak-bar { display: none; }
+      .badge { border: 1px solid #d1d5db; }
+    }
+  </style>
+</head>
+<body>
+  <div class="cetak-bar">
+    <button type="button" class="btn btn-primary" onclick="window.print()">Cetak / Simpan sebagai PDF</button>
+    <a class="btn btn-outline" href="{{ url_for('laporan', **args) }}">Kembali ke Laporan</a>
+    <span class="muted small">Di dialog cetak, pilih “Simpan sebagai PDF” untuk menghasilkan file PDF.</span>
+  </div>
+
+  <div class="cetak">
+    <h1>Laporan Absensi</h1>
+    <p class="muted">Rekap dan analisis kehadiran karyawan</p>
+    <dl class="cetak-meta">
+      {% for nama, nilai in filter_info %}<dt>{{ nama }}</dt><dd>{{ nilai }}</dd>{% endfor %}
+      <dt>Dicetak pada</dt><dd>{{ waktu_cetak }}</dd>
+    </dl>
+
+    <div class="cetak-ringkas">
+      <div><span class="muted small">Total Karyawan</span><strong>{{ stats.karyawan }}</strong></div>
+      <div><span class="muted small">Total Hadir</span><strong>{{ stats.hadir }}</strong></div>
+      <div><span class="muted small">Total Terlambat</span><strong>{{ stats.terlambat }}</strong></div>
+      <div><span class="muted small">Total Tidak Hadir</span><strong>{{ stats.tidak_hadir }}</strong></div>
+      <div><span class="muted small">Izin</span><strong>{{ stats.izin }}</strong></div>
+      <div><span class="muted small">Cuti</span><strong>{{ stats.cuti }}</strong></div>
+    </div>
+    <p class="muted small" style="margin-bottom:8px">Angka dihitung per karyawan per hari. Total Hadir termasuk yang terlambat. {{ rows|length }} data.</p>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>No.</th><th>Tanggal</th><th>ID Karyawan</th><th>Nama Karyawan</th><th>Jabatan</th>
+          <th>Jam Datang</th><th>Jam Pulang</th><th>Status Absensi</th><th>Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td class="nowrap">{{ format_tanggal(r.tanggal) }}</td>
+          <td>{{ r.id }}</td>
+          <td>{{ r.nama }}</td>
+          <td>{{ r.jabatan }}</td>
+          <td>{{ r.datang.strftime('%H:%M') if r.datang else '-' }}</td>
+          <td>{{ r.pulang.strftime('%H:%M') if r.pulang else '-' }}</td>
+          <td><span class="badge {{ 'badge-green' if r.label == 'Hadir' else 'badge-orange' if r.label == 'Terlambat' else 'badge-blue' if r.label == 'Izin' else 'badge-purple' if r.label == 'Cuti' else 'badge-red' }}">{{ r.label }}</span></td>
+          <td>{{ r.keterangan or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="center muted">Tidak ada data pada periode dan filter ini.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });</script>
+</body>
+</html>

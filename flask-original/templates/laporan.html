@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Laporan Absensi - Sistem Absensi{% endblock %}
+{% block main_class %}content-fit content-fit-auto content-laporan{% endblock %}
+
+{% macro badge(label) -%}
+<span class="badge {{ 'badge-green' if label == 'Hadir' else 'badge-orange' if label == 'Terlambat' else 'badge-blue' if label == 'Izin' else 'badge-purple' if label == 'Cuti' else 'badge-red' }}">{{ label }}</span>
+{%- endmacro %}
+
+{% block content %}
+<header class="page-head page-head-col">
+  <h2>Laporan Absensi</h2>
+  <p class="muted">Rekap dan analisis kehadiran karyawan</p>
+</header>
+
+<section class="card filter-card" aria-label="Filter laporan">
+  <form method="get" id="form-filter" class="filter-grid filter-grid-lap" data-hari-ini="{{ hari_ini.isoformat() }}">
+    <div class="filter-field">
+      <label for="f-periode">Periode</label>
+      <select id="f-periode" name="periode">
+        {% for kode, nama in periode_list %}<option value="{{ kode }}" {{ 'selected' if f.periode == kode }}>{{ nama }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="f-dari">Tanggal Mulai</label>
+      <input type="date" id="f-dari" name="dari" value="{{ f.dari.isoformat() }}" max="{{ f.sampai.isoformat() }}" {{ 'disabled' if f.periode != 'rentang' }}>
+    </div>
+    <div class="filter-field">
+      <label for="f-sampai">Tanggal Selesai</label>
+      <input type="date" id="f-sampai" name="sampai" value="{{ f.sampai.isoformat() }}" min="{{ f.dari.isoformat() }}" {{ 'disabled' if f.periode != 'rentang' }}>
+    </div>
+    <div class="filter-field">
+      <label for="f-karyawan">Karyawan</label>
+      <select id="f-karyawan" name="karyawan">
+        <option value="">Semua Karyawan</option>
+        {% for k in karyawan_list %}<option value="{{ k.id }}" {{ 'selected' if f.karyawan == k.id }}>{{ k.label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="f-status">Status Absensi</label>
+      <select id="f-status" name="status">
+        <option value="">Semua Status</option>
+        {% for s in status_list %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
+      <a href="{{ url_for('laporan') }}" class="btn btn-outline">Reset Filter</a>
+    </div>
+  </form>
+  {% for e in errors %}<div class="alert alert-error" role="alert">{{ e }}</div>{% endfor %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}" role="status">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+</section>
+
+<section class="stats" aria-label="Ringkasan laporan">
+  <div class="stat-card">
+    <span class="muted small">Total Karyawan</span>
+    <strong>{{ "{:,}".format(stats.karyawan) }}</strong>
+    <span class="muted small">karyawan unik</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Total Hadir</span>
+    <strong>{{ "{:,}".format(stats.hadir) }}</strong>
+    <span class="text-green small">{{ stats.hadir_unik }} karyawan unik · termasuk terlambat</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Total Terlambat</span>
+    <strong>{{ "{:,}".format(stats.terlambat) }}</strong>
+    <span class="text-orange small">{{ stats.terlambat_unik }} karyawan unik</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Total Tidak Hadir</span>
+    <strong>{{ "{:,}".format(stats.tidak_hadir) }}</strong>
+    <span class="text-red small">{{ stats.tidak_hadir_unik }} karyawan unik</span>
+  </div>
+</section>
+
+<section class="lap-charts" aria-label="Grafik laporan">
+  <div class="card chart-card">
+    <div class="row-between">
+      <h3 id="judul-tren">Tren Kehadiran</h3>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--green)"></i>Hadir (termasuk terlambat)</span>
+        <span><i class="dot" style="background:var(--orange)"></i>Terlambat</span>
+      </div>
+    </div>
+    <div class="chart-box" id="chart-tren" role="img" aria-labelledby="judul-tren">
+      {% if not tren.label %}<p class="muted small chart-empty">Belum ada data untuk grafik pada filter ini.</p>{% endif %}
+    </div>
+  </div>
+  <div class="card chart-card">
+    <h3>Distribusi Status</h3>
+    {% if stats.total_baris %}
+    <div class="dist">
+      {% for d in stats.distribusi %}
+      <div class="dist-row">
+        <span>{{ 'Hadir' if d.label == 'Hadir' else d.label }}</span>
+        <div class="dist-bar"><div class="dist-fill dist-{{ d.label|lower|replace(' ', '-') }}" style="width: {{ '%.1f'|format(d.persen) }}%"></div></div>
+        <span class="dist-val"><strong>{{ d.jumlah }}</strong> <span class="muted">({{ '%.0f'|format(d.persen) }}%)</span></span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="muted small dist-note">Hadir = tepat waktu. Satuan: karyawan × hari.</p>
+    {% else %}
+    <p class="muted small chart-empty">Belum ada data untuk grafik pada filter ini.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card table-card" aria-labelledby="judul-daftar">
+  <div class="row-between daftar-head lap-head">
+    <div>
+      <h3 id="judul-daftar">Detail Laporan Absensi</h3>
+      <span class="muted small">
+        Periode {{ periode_teks }} ·
+        {% if total %}{{ total }} data ditemukan (menampilkan {{ awal }}–{{ akhir }}){% else %}0 data ditemukan{% endif %}
+      </span>
+    </div>
+    <div class="lap-tools">
+      <input type="search" id="f-q" name="q" form="form-filter" value="{{ f.q }}" class="search lap-search"
+             placeholder="Cari nama atau ID..." autocomplete="off" maxlength="100" aria-label="Cari nama atau ID karyawan">
+      <a class="btn btn-outline" id="btn-xlsx" href="{{ url_for('laporan_export', fmt='xlsx', **args) }}">Ekspor Excel</a>
+      <a class="btn btn-outline" id="btn-csv" href="{{ url_for('laporan_export', fmt='csv', **args) }}">Unduh CSV</a>
+      <a class="btn btn-outline" id="btn-cetak" href="{{ url_for('laporan_cetak', **args) }}" target="_blank" rel="noopener">Cetak Laporan</a>
+    </div>
+  </div>
+
+  <div class="table-scroll scroll-laporan">
+    <table class="table table-laporan">
+      <thead>
+        <tr>
+          <th>No.</th><th>Tanggal</th><th>ID Karyawan</th><th>Nama Karyawan</th><th>Jabatan</th>
+          <th>Jam Datang</th><th>Jam Pulang</th><th>Status Absensi</th><th>Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in data %}
+        <tr>
+          <td>{{ nomor_awal + loop.index }}</td>
+          <td class="nowrap">{{ format_tanggal(r.tanggal) }}</td>
+          <td>{{ r.id }}</td>
+          <td>{{ r.nama }}</td>
+          <td>{{ r.jabatan }}</td>
+          <td>{{ r.datang.strftime('%H:%M') if r.datang else '-' }}</td>
+          <td>{{ r.pulang.strftime('%H:%M') if r.pulang else '-' }}</td>
+          <td>{{ badge(r.label) }}</td>
+          <td class="muted">{{ r.keterangan or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty-cell">
+          <div class="empty-state">
+            <strong>{{ 'Tidak ada data yang cocok dengan filter' if filter_aktif else 'Belum ada data laporan pada periode ini' }}</strong>
+            <span class="muted small">{{ 'Ubah atau reset filter untuk melihat data lain.' if filter_aktif else 'Data akan muncul setelah karyawan melakukan absensi atau pada hari kerja yang sudah berlalu.' }}</span>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row-between">
+    <span class="muted small">Jam dalam WIB</span>
+    <nav class="pagination" aria-label="Pagination">
+      <a {% if page > 1 %}href="{{ url_for('laporan', page=page - 1, **args) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Sebelumnya">‹</a>
+      {% for n in halaman %}
+        {% if n is none %}<a class="gap">…</a>
+        {% else %}<a href="{{ url_for('laporan', page=n, **args) }}" class="{{ 'active' if n == page }}" {% if n == page %}aria-current="page"{% endif %}>{{ n }}</a>
+        {% endif %}
+      {% endfor %}
+      <a {% if page < jumlah_hal %}href="{{ url_for('laporan', page=page + 1, **args) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Berikutnya">›</a>
+    </nav>
+  </div>
+</section>
+
+<script type="application/json" id="data-tren">{{ tren|tojson }}</script>
+<script>
+(function () {
+  var form = document.getElementById('form-filter');
+  var periode = document.getElementById('f-periode');
+  var dari = document.getElementById('f-dari');
+  var sampai = document.getElementById('f-sampai');
+  var q = document.getElementById('f-q');
+  var timer;
+
+  // ---- Periode: tanggal mulai/selesai hanya bisa diedit pada "Rentang Tanggal" ----
+  // (hasil akhir tetap dihitung ulang di backend; ini hanya pratinjau di form)
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function hitung(p) {
+    var h = new Date(form.dataset.hariIni + 'T00:00:00Z');
+    if (p === 'hari_ini') return [iso(h), iso(h)];
+    if (p === 'minggu_ini') {
+      var s = new Date(h); s.setUTCDate(h.getUTCDate() - ((h.getUTCDay() + 6) % 7));
+      var e = new Date(s); e.setUTCDate(s.getUTCDate() + 6);
+      return [iso(s), iso(e)];
+    }
+    return [iso(new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth(), 1))),
+            iso(new Date(Date.UTC(h.getUTCFullYear(), h.getUTCMonth() + 1, 0)))];
+  }
+  periode.addEventListener('change', function () {
+    var custom = periode.value === 'rentang';
+    dari.disabled = sampai.disabled = !custom;
+    if (!custom) {
+      var r = hitung(periode.value);
+      dari.value = r[0]; sampai.value = r[1];
+      dari.max = ''; sampai.min = '';
+    }
+  });
+  // Tanggal selesai tidak boleh lebih awal daripada tanggal mulai (divalidasi ulang di backend)
+  dari.addEventListener('change', function () { if (dari.value) sampai.min = dari.value; });
+  sampai.addEventListener('change', function () { if (sampai.value) dari.max = sampai.value; });
+
+  // ---- Pencarian di card tabel: kirim ke backend, filter lain ikut terbawa (atribut form) ----
+  function fokusLagi() { try { sessionStorage.setItem('fokusLaporan', '1'); } catch (e) {} }
+  q.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { fokusLagi(); form.requestSubmit(); }, 400);
+  });
+  try {
+    if (sessionStorage.getItem('fokusLaporan')) {
+      sessionStorage.removeItem('fokusLaporan');
+      q.focus(); var n = q.value.length; q.setSelectionRange(n, n);
+    }
+  } catch (e) {}
+
+  // ---- Grafik tren (SVG, tanpa library). Data dari backend, mengikuti filter aktif ----
+  var T = JSON.parse(document.getElementById('data-tren').textContent);
+  var box = document.getElementById('chart-tren');
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function gambar() {
+    if (!T.label.length) return;
+    box.querySelectorAll('svg').forEach(function (s) { s.remove(); });
+    var W = Math.max(box.clientWidth, 280), H = Math.max(box.clientHeight, 120);
+    var m = { t: 10, r: 10, b: 24, l: 30 };
+    var pw = W - m.l - m.r, ph = H - m.t - m.b, n = T.label.length;
+    var maks = Math.max(1, Math.max.apply(null, T.hadir));
+    var langkah = Math.max(1, Math.ceil(maks / 4)), ymaks = Math.ceil(maks / langkah) * langkah;
+    var svg = el('svg', { width: W, height: H, viewBox: '0 0 ' + W + ' ' + H });
+    function x(i) { return m.l + (n === 1 ? pw / 2 : pw * i / (n - 1)); }
+    function y(v) { return m.t + ph - ph * v / ymaks; }
+    for (var v = 0; v <= ymaks; v += langkah) {
+      el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: 'var(--border)', 'stroke-width': 1 }, svg);
+      var tl = el('text', { x: m.l - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10, fill: 'var(--muted)' }, svg);
+      tl.textContent = v;
+    }
+    var tiap = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(pw / 56))));
+    for (var i = 0; i < n; i += tiap) {
+      var xl = el('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--muted)' }, svg);
+      xl.textContent = T.label[i];
+    }
+    [['hadir', 'var(--green)', 'Hadir'], ['terlambat', 'var(--orange)', 'Terlambat']].forEach(function (s) {
+      var pts = T[s[0]].map(function (v, i) { return x(i) + ',' + y(v); }).join(' ');
+      if (n > 1) el('polyline', { points: pts, fill: 'none', stroke: s[1], 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+      T[s[0]].forEach(function (v, i) {
+        var c = el('circle', { cx: x(i), cy: y(v), r: n > 60 ? 2 : 3.5, fill: s[1] }, svg);
+        el('title', {}, c).textContent = T.penuh[i] + ' — ' + s[2] + ': ' + v + ' karyawan';
+      });
+    });
+    box.appendChild(svg);
+  }
+  gambar();
+  if (window.ResizeObserver) new ResizeObserver(gambar).observe(box); else window.addEventListener('resize', gambar);
+})();
+</script>
+{% endblock %}

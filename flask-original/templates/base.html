@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Attendance System{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% block body %}
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">Attendance<br>System</div>
+      <nav>
+        <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active == 'dashboard' }}">Dashboard</a>
+        <a href="{{ url_for('karyawan') }}" class="{{ 'active' if active == 'karyawan' }}">Data Karyawan</a>
+        <a href="{{ url_for('absensi') }}" class="{{ 'active' if active == 'absensi' }}">Absensi</a>
+        <a href="{{ url_for('riwayat') }}" class="{{ 'active' if active == 'riwayat' }}">Riwayat</a>
+        <a href="{{ url_for('pengajuan') }}" class="{{ 'active' if active == 'pengajuan' }}">Pengajuan</a>
+        <a href="{{ url_for('laporan') }}" class="{{ 'active' if active == 'laporan' }}">Laporan</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </nav>
+    </aside>
+
+    <main class="content {% block main_class %}{% endblock %}">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% endblock %}
+</body>
+</html>

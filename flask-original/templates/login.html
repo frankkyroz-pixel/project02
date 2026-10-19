@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Login - Sistem Absensi{% endblock %}
+
+{% block body %}
+<div class="login-wrap">
+  <form class="login-card" method="post">
+    <div class="login-icon">👥</div>
+    <h1>Attendance System</h1>
+    <p class="muted">Silakan login untuk melanjutkan</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" placeholder="Masukkan username Anda" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" placeholder="Masukkan password Anda" required>
+
+    <div class="row-between">
+      <label class="check"><input type="checkbox" name="remember"> Ingat Saya</label>
+      <a href="#" class="link">Lupa Password?</a>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block">Login</button>
+    <p class="muted small center">© 2024 Attendance System</p>
+  </form>
+</div>
+{% endblock %}

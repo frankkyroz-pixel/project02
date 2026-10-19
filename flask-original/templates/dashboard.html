@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Admin - Sistem Absensi{% endblock %}
+
+{% block content %}
+<header class="page-head">
+  <div>
+    <h2>Overview Dashboard</h2>
+    <p class="muted">Ringkasan data absensi hari ini</p>
+  </div>
+  <div class="date-box">{{ tanggal_hari_ini }}</div>
+</header>
+
+<section class="stats">
+  <div class="stat-card">
+    <span class="muted small">Total Karyawan</span>
+    <strong>{{ "{:,}".format(stats.total) }}</strong>
+    <span class="muted small">orang</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Hadir</span>
+    <strong>{{ "{:,}".format(stats.hadir) }}</strong>
+    <span class="text-green small">{{ stats.persen_hadir }}%</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Terlambat</span>
+    <strong>{{ "{:,}".format(stats.terlambat) }}</strong>
+    <span class="text-orange small">{{ stats.persen_terlambat }}%</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Tidak Hadir</span>
+    <strong>{{ "{:,}".format(stats.tidak_hadir) }}</strong>
+    <span class="text-red small">{{ stats.persen_tidak_hadir }}%</span>
+  </div>
+</section>
+
+<section class="grid-2">
+  <div class="card">
+    <div class="row-between">
+      <h3>Log Absensi Terbaru</h3>
+      <a href="{{ url_for('riwayat') }}" class="link small">Lihat Semua</a>
+    </div>
+    <table class="table">
+      <thead>
+        <tr><th>Nama</th><th>Waktu</th><th>Jenis</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for l in logs %}
+        <tr>
+          <td>{{ l.nama }}</td>
+          <td>
+            {{ l.waktu }}
+            {% if l.tanggal != hari_ini %}
+            <span class="muted small">({{ l.tanggal.strftime('%d/%m') }})</span>
+            {% endif %}
+          </td>
+          <td>{{ l.jenis }}</td>
+          <td>
+            <span class="badge
+              {{ 'badge-green' if l.status == 'Tepat Waktu'
+                 else 'badge-orange' if l.status == 'Terlambat'
+                 else 'badge-red' }}">{{ l.status }}</span>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="center muted">Belum ada catatan absensi</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Pemberitahuan</h3>
+    {% if pemberitahuan %}
+    <ul class="notif">
+      {% for p in pemberitahuan %}
+      <li>{{ p }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted small">Belum ada pemberitahuan.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

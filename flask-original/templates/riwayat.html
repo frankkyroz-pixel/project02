@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Riwayat Absensi - Sistem Absensi{% endblock %}
+{% block main_class %}content-fit content-fit-auto{% endblock %}
+
+{% block content %}
+<header class="page-head page-head-col">
+  <h2>Riwayat Absensi</h2>
+  <p class="muted">
+    Riwayat kehadiran karyawan
+    {% if satu_hari %}pada {{ format_tanggal(f.dari) }}.{% else %}periode {{ format_tanggal(f.dari) }} – {{ format_tanggal(f.sampai) }}.
+    Angka ringkasan dihitung per karyawan per hari, bukan karyawan unik.{% endif %}
+  </p>
+</header>
+
+<section class="stats stats-3">
+  <div class="stat-card">
+    <span class="muted small">Total Hadir</span>
+    <strong>{{ "{:,}".format(stats.hadir) }}</strong>
+    <span class="text-green small">{{ 'orang' if satu_hari else 'kehadiran' }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Terlambat</span>
+    <strong>{{ "{:,}".format(stats.terlambat) }}</strong>
+    <span class="text-orange small">{{ 'orang' if satu_hari else 'kehadiran' }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="muted small">Tidak Hadir</span>
+    <strong>{{ "{:,}".format(stats.tidak_hadir) }}</strong>
+    <span class="text-red small">{{ 'orang' if satu_hari else 'karyawan × hari' }}</span>
+  </div>
+</section>
+
+<section class="card filter-card" aria-label="Filter riwayat">
+  <form method="get" id="form-filter" class="filter-grid">
+    <div class="filter-field filter-q">
+      <label for="f-q">Cari karyawan</label>
+      <input type="search" id="f-q" name="q" value="{{ f.q }}" placeholder="Cari nama atau ID karyawan..." autocomplete="off" maxlength="100">
+    </div>
+    <div class="filter-field">
+      <label for="f-dari">Dari Tanggal</label>
+      <input type="date" id="f-dari" name="dari" value="{{ f.dari.isoformat() }}" max="{{ f.sampai.isoformat() }}">
+    </div>
+    <div class="filter-field">
+      <label for="f-sampai">Sampai Tanggal</label>
+      <input type="date" id="f-sampai" name="sampai" value="{{ f.sampai.isoformat() }}" min="{{ f.dari.isoformat() }}">
+    </div>
+    <div class="filter-field">
+      <label for="f-status">Status</label>
+      <select id="f-status" name="status">
+        <option value="">Semua Status</option>
+        {% for s in status_list %}
+        <option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary">Terapkan</button>
+      <a href="{{ url_for('riwayat') }}" class="btn btn-outline">Reset Filter</a>
+    </div>
+  </form>
+  {% for e in errors %}<div class="alert alert-error" role="alert">{{ e }}</div>{% endfor %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }}" role="status">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+</section>
+
+<section class="card table-card" aria-labelledby="judul-daftar">
+  <div class="row-between daftar-head">
+    <div>
+      <h3 id="judul-daftar">Daftar Riwayat Absensi</h3>
+      <span class="muted small">
+        {% if total %}Menampilkan {{ awal }}–{{ akhir }} dari {{ total }} data{% else %}Menampilkan 0 data{% endif %}
+      </span>
+    </div>
+    <a class="btn btn-outline" href="{{ url_for('riwayat_export', **args) }}">Export CSV</a>
+  </div>
+
+  <div class="table-scroll scroll-riwayat">
+    <table class="table table-riwayat">
+      <thead>
+        <tr>
+          <th>No.</th><th>Tanggal</th><th>ID Karyawan</th><th>Nama Karyawan</th><th>Jabatan</th>
+          <th>Jam Datang</th><th>Jam Pulang</th><th>Status</th><th>Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in data %}
+        <tr>
+          <td>{{ nomor_awal + loop.index }}</td>
+          <td class="nowrap">{{ format_tanggal(r.tanggal) }}</td>
+          <td>{{ r.id }}</td>
+          <td>{{ r.nama }}</td>
+          <td>{{ r.jabatan }}</td>
+          <td>{{ r.datang.strftime('%H:%M') if r.datang else '—' }}</td>
+          <td>{{ r.pulang.strftime('%H:%M') if r.pulang else '—' }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if r.status == 'Tepat Waktu' else 'badge-orange' if r.status == 'Terlambat' else 'badge-blue' if r.status in ('Cuti', 'Izin') else 'badge-red' }}">{{ r.status }}</span>
+          </td>
+          <td class="muted">{{ r.keterangan }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="center muted">Belum ada riwayat absensi pada periode ini</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row-between">
+    <span class="muted small">Jam dalam WIB</span>
+    <nav class="pagination" aria-label="Pagination">
+      <a {% if page > 1 %}href="{{ url_for('riwayat', page=page - 1, **args) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Sebelumnya">‹</a>
+      {% for n in halaman %}
+        {% if n is none %}<a class="gap">…</a>
+        {% else %}<a href="{{ url_for('riwayat', page=n, **args) }}" class="{{ 'active' if n == page }}" {% if n == page %}aria-current="page"{% endif %}>{{ n }}</a>
+        {% endif %}
+      {% endfor %}
+      <a {% if page < jumlah_hal %}href="{{ url_for('riwayat', page=page + 1, **args) }}"{% else %}class="disabled" aria-disabled="true"{% endif %} aria-label="Berikutnya">›</a>
+    </nav>
+  </div>
+</section>
+
+<script>
+(function () {
+  var form = document.getElementById('form-filter');
+  var dari = document.getElementById('f-dari');
+  var sampai = document.getElementById('f-sampai');
+  var q = document.getElementById('f-q');
+  var timer;
+
+  // Tanggal awal tidak boleh melebihi tanggal akhir (dan sebaliknya)
+  dari.addEventListener('change', function () { if (dari.value) sampai.min = dari.value; });
+  sampai.addEventListener('change', function () { if (sampai.value) dari.max = sampai.value; });
+
+  // Filter dikirim otomatis ke backend; tombol "Terapkan" tetap ada tanpa JavaScript
+  function kirim() {
+    try { sessionStorage.setItem('fokusRiwayat', q === document.activeElement ? '1' : ''); } catch (e) {}
+    form.submit();
+  }
+  [dari, sampai, document.getElementById('f-status')].forEach(function (el) { el.addEventListener('change', kirim); });
+  q.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(kirim, 400); });
+  try {
+    if (sessionStorage.getItem('fokusRiwayat')) {
+      sessionStorage.removeItem('fokusRiwayat');
+      q.focus(); var n = q.value.length; q.setSelectionRange(n, n);
+    }
+  } catch (e) {}
+})();
+</script>
+{% endblock %}
